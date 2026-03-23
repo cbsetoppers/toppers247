@@ -45,10 +45,6 @@ class StudentModel {
 
   factory StudentModel.fromJson(Map<String, dynamic> json) {
     try {
-      final s = json['stream']?.toString();
-      final normalizedStream = s?.toUpperCase() == 'PCBM' ? 'PCMB' : s;
-      
-      // Handle both 'class' and 'student_class' column names
       final studentClass = json['student_class'] ?? json['class'] ?? '';
       
       return StudentModel(
@@ -59,7 +55,7 @@ class StudentModel {
         dob: json['dob'] ?? '',
         studentClass: studentClass,
         classId: json['class_id']?.toString(),
-        stream: normalizedStream,
+        stream: json['stream']?.toString(),
         streamId: json['stream_id']?.toString(),
         phone: json['phone']?.toString(),
         gender: json['gender'] ?? '',

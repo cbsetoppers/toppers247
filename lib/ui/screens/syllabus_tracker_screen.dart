@@ -38,36 +38,31 @@ class _SyllabusTrackerScreenState extends ConsumerState<SyllabusTrackerScreen> {
     if (subjectsMap.isEmpty) return [];
 
     final allSubjects = subjectsMap.keys.toList();
+    final su = stream.toUpperCase();
 
     // IX and X: show everything
     if (cls == 'IXth' || cls == 'Xth') return allSubjects;
 
-    // XI and XII: filter by stream
+    // XI and XII: filter by stream presence
     if (cls == 'XIth' || cls == 'XIIth') {
-      final su = stream.toUpperCase();
-      final isPCM = su.contains('PCM') || su.contains('MATH');
-      final isPCB = su.contains('PCB') || su.contains('BIO');
-
-      // if neither is specifically set we still show Physics/Chemistry
       final List<String> filtered = [];
       for (final subj in allSubjects) {
-        final sUp = subj.toUpperCase();
+        final sobjUpper = subj.toUpperCase();
 
-        // Always show English
-        if (sUp.contains('ENGLISH')) { filtered.add(subj); continue; }
-
-        // Always show Physics & Chemistry (common to PCM & PCB)
-        if (sUp.contains('PHYSICS') || sUp.contains('CHEMISTRY')) {
-          filtered.add(subj); continue;
+        // Always show English, Physics, Chemistry
+        if (sobjUpper.contains('ENGLISH') || 
+            sobjUpper.contains('PHYSICS') || 
+            sobjUpper.contains('CHEMISTRY')) {
+          filtered.add(subj);
+          continue;
         }
 
-        // Maths → PCM
-        if ((sUp.contains('MATH') || sUp.contains('MATHEMATICS')) && (isPCM || !isPCB)) {
-          filtered.add(subj); continue;
-        }
-
-        // Biology → PCB
-        if (sUp.contains('BIOLOGY') && (isPCB || !isPCM)) {
+        // Logic for Math/Biology/Accountancy etc.
+        // If the subject name (partially) appears in the stream or vice versa
+        // OR if the stream contains 'ALL' or is empty (meaning all)
+        if (su.isEmpty || su.contains('ALL') || 
+            su.contains(sobjUpper) || 
+            sobjUpper.contains(su)) {
           filtered.add(subj);
         }
       }

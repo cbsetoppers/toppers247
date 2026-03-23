@@ -625,38 +625,20 @@ class SupabaseService {
 
   String? _normalizeStream(String? stream) {
     if (stream == null || stream.isEmpty) return null;
-    final s = stream.toUpperCase().trim();
-    if (s.contains('PCM') && !s.contains('B')) return 'PCM';
-    if (s.contains('PCB') && !s.contains('M')) return 'PCB';
-    if (s.contains('PCM') && s.contains('B')) return 'PCMB';
-    if (s.contains('PCBM')) return 'PCMB';
-    if (s.contains('COMMERCE') || s.contains('COMM')) return 'Commerce';
-    if (s.contains('ARTS') || s.contains('HUMANITIES')) return 'Arts';
-    return stream;
+    return stream.trim();
   }
 
   bool _matchesStream(List<String> subjectStreams, String? userStream) {
     // Empty subject streams means available to all streams
     if (subjectStreams.isEmpty) return true;
 
-    // If user has no stream, show subjects with no stream restriction or all streams
-    if (userStream == null) return true;
+    // If user has no stream, show subjects with no stream restriction
+    if (userStream == null) return false;
 
-    // Normalize and check
-    final normalizedSubjectStreams = subjectStreams.map((s) {
-      final u = s.toUpperCase();
-      if (u.contains('PCM') && !u.contains('B')) return 'PCM';
-      if (u.contains('PCB') && !u.contains('M')) return 'PCB';
-      if (u.contains('PCM') && u.contains('B')) return 'PCMB';
-      if (u.contains('PCBM')) return 'PCMB';
-      if (u.contains('COMMERCE') || u.contains('COMM')) return 'Commerce';
-      if (u.contains('ARTS') || u.contains('HUMANITIES')) return 'Arts';
-      return s;
-    }).toList();
-
-    return normalizedSubjectStreams.contains(userStream) ||
-        normalizedSubjectStreams.any((ss) => userStream.contains(ss)) ||
-        userStream.contains('ALL');
+    // Exact match is required now to support dynamic streams
+    return subjectStreams.any((ss) => 
+      ss.toUpperCase().trim() == userStream.toUpperCase().trim()
+    );
   }
 
   bool _matchesExams(
