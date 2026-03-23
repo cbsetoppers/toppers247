@@ -400,44 +400,82 @@ class SupabaseService {
   }
 
   Future<List<String>> fetchStreams({String? classId}) async {
+    // If a classId is provided, ONLY return streams linked to that class in the tree.
     if (classId != null) {
       final List<dynamic> response = await _client
-          .from('class_streams')
-          .select('streams(name)')
-          .eq('class_id', classId);
+          .from('tree')
+          .select('name')
+          .eq('parent_id', classId)
+          .eq('node_type', 'STREAM')
+          .order('name');
       
-      return response.map((e) {
-        final name = (e['streams'] as Map<String, dynamic>)['name'].toString();
-        return name.toUpperCase();
-      }).toList();
+      return response.map((e) => e['name'].toString().toUpperCase()).toList();
     }
 
-    final List<dynamic> response = await _client
-        .from('streams')
-        .select('name')
-        .order('name');
-    final fetched = response
-        .map((e) => e['name'].toString().toUpperCase())
-        .toList();
-    return fetched;
+    return [];
   }
 
-  // Fetch dynamic competitive exams from Supabase
+  // Fetch syllabus from the tree table
+  Future<List<Map<String, dynamic>>> fetchSyllabusChapters(String nodeParentId) async {
+    // Chapters are children of a Class node (or nested deeper)
+    final List<dynamic> response = await _client
+        .from('tree')
+        .select('*, children:tree(*)')
+        .eq('parent_id', nodeParentId)
+        .eq('node_type', 'CHAPTER')
+        .order('order_index', ascending: true);
+    
+    return List<Map<String, dynamic>>.from(response);
+  }
+
+  Future<void> updateSyllabusTopicProgress(String studentId, String topicId, bool isCompleted) async {
+    await _client.from('SyllabusProgress').upsert({
+      'student_id': studentId,
+      'topic_id': topicId,
+      'is_completed': isCompleted,
+      'updated_at': DateTime.now().toIso8601String(),
+    }, onConflict: 'student_id,topic_id');
+  }
+
+  Future<Map<String, bool>> fetchSyllabusProgress(String studentId) async {
+    final List<dynamic> response = await _client
+        .from('SyllabusProgress')
+        .select('topic_id, is_completed')
+        .eq('student_id', studentId);
+    
+    final Map<String, bool> progress = {};
+    for (final res in response) {
+      progress[res['topic_id'].toString()] = res['is_completed'] as bool;
+    }
+    return progress;
+  }
+
+  // Fetch dynamic competitive exams from the tree table
   Future<List<String>> fetchCompetitiveExams() async {
     final List<dynamic> response = await _client
-        .from('competitive_exams')
+        .from('tree')
         .select('name')
+        .eq('node_type', 'EXAM')
         .order('name');
     return response.map((e) => e['name'].toString().toUpperCase()).toList();
   }
 
-  // Fetch dynamic classes from Supabase
+  // Fetch dynamic classes from the tree table
   Future<List<Map<String, dynamic>>> fetchClasses() async {
     final List<dynamic> response = await _client
-        .from('classes')
-        .select('id, name, class_type')
+        .from('tree')
+        .select('id, name, metadata')
+        .eq('node_type', 'CLASS')
         .order('name');
-    return response.map((e) => Map<String, dynamic>.from(e)).toList();
+    
+    return response.map((e) {
+      final map = Map<String, dynamic>.from(e);
+      // Map metadata.category to class_type for backward compatibility if needed
+      if (map['metadata'] != null && map['metadata']['category'] != null) {
+        map['class_type'] = map['metadata']['category'];
+      }
+      return map;
+    }).toList();
   }
 
   Future<void> sendPasswordReset(String identifier) async {
@@ -562,22 +600,17 @@ class SupabaseService {
     await _client.auth.signOut();
   }
 
-  // CONTENT
+  // Fetch subjects (nodes of type SECTION) from the tree table
   Future<List<SubjectModel>> fetchSubjects(
     String targetClass, {
     String? targetStream,
     List<String>? exams,
   }) async {
-    PostgrestFilterBuilder query = _client.from('subjects').select();
-
-    // For Admin, fetch all subjects without filtering
-    // For regular users, fetch subjects that include their class
-    if (targetClass != 'Admin') {
-      // Normalize class name for matching
-      final normalizedClass = _normalizeClassForDb(targetClass);
-      query = query.contains('target_classes', [normalizedClass]);
-    }
-
+    // In the new tree architecture, subjects are SECTION nodes.
+    // However, for backward compatibility with the existing SubjectModel,
+    // we fetch them from the tree table and filter by node_type='SECTION'.
+    var query = _client.from('tree').select().eq('node_type', 'SECTION');
+    
     final List<dynamic> response = await query.order('order_index');
 
     List<SubjectModel> subjects = response.map((s) {
@@ -591,7 +624,6 @@ class SupabaseService {
     // Client-side filtering for streams and exams
     if (targetClass != 'Admin') {
       final normalizedStream = _normalizeStream(targetStream);
-      final normalizedClass = _normalizeClassForDb(targetClass);
 
       return subjects.where((s) {
         final stStreams = s.targetStreams ?? [];
@@ -601,26 +633,13 @@ class SupabaseService {
         bool matchesStream = _matchesStream(stStreams, normalizedStream);
 
         // Competitive Exam Check
-        bool matchesExam = _matchesExams(stExams, exams, normalizedClass);
+        bool matchesExam = _matchesExams(stExams, exams, targetClass);
 
         return matchesStream && matchesExam;
       }).toList();
     }
 
     return subjects;
-  }
-
-  String _normalizeClassForDb(String cls) {
-    // Normalize class names to match database format
-    final s = cls.toUpperCase().trim();
-    if (s == 'IX' || s == '9' || s == 'IXTH') return 'IX';
-    if (s == 'X' || s == '10' || s == 'XTH') return 'X';
-    if (s == 'XI' || s == '11' || s == 'XITH') return 'XI';
-    if (s == 'XII' || s == '12' || s == 'XIITH') return 'XII';
-    if (s == 'XII+' || s == 'DROPPER' || s == 'DROP' || s == '13') {
-      return 'XII+';
-    }
-    return cls;
   }
 
   String? _normalizeStream(String? stream) {
@@ -674,29 +693,36 @@ class SupabaseService {
   }
 
   Future<List<FolderModel>> fetchFolders(
-    String subjectId, {
+    String nodeId, {
     String? parentId,
   }) async {
-    var query = _client.from('folders').select().eq('subject_id', subjectId);
+    // FolderId is the ID of a node in the tree (could be SECTION or FOLDER)
+    // If parentId is null, we fetch children of the nodeId (the section/subject root)
+    var query = _client.from('tree').select().eq('node_type', 'FOLDER');
+    
     if (parentId != null) {
       query = query.eq('parent_id', parentId);
     } else {
-      query = query.filter('parent_id', 'is', null);
+      query = query.eq('parent_id', nodeId);
     }
+
     final List<dynamic> response = await query.order('order_index');
     return response.map((f) => FolderModel.fromJson(f)).toList();
   }
 
   Future<List<MaterialModel>> fetchMaterials(
-    String subjectId, {
+    String nodeId, {
     String? folderId,
   }) async {
-    var query = _client.from('materials').select().eq('subject_id', subjectId);
+    // Materials now link via node_id (which is either the section root id or a folder id)
+    var query = _client.from('materials').select();
+    
     if (folderId != null) {
-      query = query.eq('folder_id', folderId);
+      query = query.eq('node_id', folderId);
     } else {
-      query = query.filter('folder_id', 'is', null);
+      query = query.eq('node_id', nodeId);
     }
+    
     final List<dynamic> response = await query.order('order_index');
     return response.map((m) {
       final processed = Map<String, dynamic>.from(m);
@@ -734,7 +760,7 @@ class SupabaseService {
   Future<List<StoreProductModel>> fetchStoreProducts() async {
     try {
       final List<dynamic> response = await _client
-          .from('store_products')
+          .from('StoreProducts')
           .select()
           .order('order_index');
       return response.map((p) => StoreProductModel.fromJson(p)).toList();
@@ -747,12 +773,25 @@ class SupabaseService {
   Future<List<Map<String, dynamic>>> fetchStoreBanners() async {
     try {
       final List<dynamic> response = await _client
-          .from('store_banners')
+          .from('StoreBanners')
           .select()
           .order('order_index');
       return response.map((e) => Map<String, dynamic>.from(e)).toList();
     } catch (e) {
       debugPrint('Fetch Banners Error: $e');
+      return [];
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> fetchDashboardContent() async {
+    try {
+      final response = await _client
+          .from('DashboardContent')
+          .select()
+          .order('order_index');
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      debugPrint('Fetch Dashboard Content Error: $e');
       return [];
     }
   }
@@ -902,7 +941,7 @@ class SupabaseService {
     String? fileUrl,
   }) async {
     try {
-      await _client.from('purchase_history').insert({
+      await _client.from('PurchaseHistory').insert({
         'id': id,
         'student_id': studentId,
         'product_name': CryptoService.encryptSymmetric(productName),
@@ -924,7 +963,7 @@ class SupabaseService {
   ) async {
     try {
       final response = await _client
-          .from('purchase_history')
+          .from('PurchaseHistory')
           .select()
           .eq('student_id', studentId)
           .order('purchase_date', ascending: false);
