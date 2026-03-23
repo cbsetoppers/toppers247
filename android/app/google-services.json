@@ -1,0 +1,30 @@
+{
+    "project_info": {
+        "project_number": "821058114717",
+        "firebase_url": "https://cbset0ppers-default-rtdb.firebaseio.com",
+        "project_id": "cbset0ppers",
+        "storage_bucket": "cbset0ppers.firebasestorage.app"
+    },
+    "client": [
+        {
+            "client_info": {
+                "mobilesdk_app_id": "1:821058114717:android:d1eace89c4767f35317074",
+                "android_client_info": {
+                    "package_name": "com.cbsetoppers.learning"
+                }
+            },
+            "oauth_client": [],
+            "api_key": [
+                {
+                    "current_key": "AIzaSyBsLWGzLJ5sZQSWVY4kW7KAmiJ_d3_xiw8"
+                }
+            ],
+            "services": {
+                "appinvite_service": {
+                    "other_platform_oauth_client": []
+                }
+            }
+        }
+    ],
+    "configuration_version": "1"
+}
