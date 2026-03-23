@@ -408,7 +408,7 @@ class SupabaseService {
       
       return response.map((e) {
         final name = (e['streams'] as Map<String, dynamic>)['name'].toString();
-        return name.toUpperCase() == 'PCBM' ? 'PCMB' : name.toUpperCase();
+        return name.toUpperCase();
       }).toList();
     }
 
@@ -419,7 +419,7 @@ class SupabaseService {
     final fetched = response
         .map((e) => e['name'].toString().toUpperCase())
         .toList();
-    return fetched.map((s) => s == 'PCBM' ? 'PCMB' : s).toList();
+    return fetched;
   }
 
   // Fetch dynamic competitive exams from Supabase
